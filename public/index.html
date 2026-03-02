@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Zendesk Ticket Analysis</title>
+  <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; color: #333; }
+    header { background: #1a1a2e; color: #fff; padding: 20px 32px; }
+    header h1 { font-size: 1.4rem; font-weight: 600; }
+    .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+    /* Filters */
+    .filters { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .filter-group { display: flex; flex-direction: column; gap: 4px; }
+    .filter-group label { font-size: 0.8rem; font-weight: 600; color: #666; text-transform: uppercase; }
+    .filter-group input, .filter-group select { padding: 8px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 0.9rem; }
+    .btn { padding: 8px 24px; background: #4361ee; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+    .btn:hover { background: #3a56d4; }
+    .btn:disabled { background: #aaa; cursor: not-allowed; }
+
+    /* Tabs */
+    .tabs { display: flex; gap: 0; margin-bottom: 24px; }
+    .tab { padding: 12px 24px; background: #fff; border: 1px solid #ddd; cursor: pointer; font-weight: 600; font-size: 0.9rem; color: #666; }
+    .tab:first-child { border-radius: 8px 0 0 8px; }
+    .tab:last-child { border-radius: 0 8px 8px 0; }
+    .tab.active { background: #4361ee; color: #fff; border-color: #4361ee; }
+
+    /* Metrics */
+    .metrics { display: flex; gap: 16px; margin-bottom: 24px; }
+    .metric-card { background: #fff; border-radius: 8px; padding: 20px; flex: 1; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .metric-card .value { font-size: 2rem; font-weight: 700; color: #4361ee; }
+    .metric-card .label { font-size: 0.85rem; color: #888; margin-top: 4px; }
+
+    /* Charts */
+    .chart-section { background: #fff; border-radius: 8px; padding: 20px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+    .chart-section h2 { font-size: 1.1rem; margin-bottom: 16px; color: #333; }
+
+    .loading { text-align: center; padding: 60px; color: #888; font-size: 1.1rem; }
+    .error { background: #fee; color: #c00; border-radius: 8px; padding: 16px; margin-bottom: 24px; }
+
+    @media (max-width: 768px) {
+      .filters { flex-direction: column; }
+      .chart-row { grid-template-columns: 1fr; }
+      .metrics { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Zendesk Ticket Analysis Dashboard</h1>
+  </header>
+
+  <div class="container">
+    <!-- Filters -->
+    <div class="filters">
+      <div class="filter-group">
+        <label>Start Date</label>
+        <input type="date" id="startDate" />
+      </div>
+      <div class="filter-group">
+        <label>End Date</label>
+        <input type="date" id="endDate" />
+      </div>
+      <div class="filter-group">
+        <label>Period</label>
+        <select id="period">
+          <option value="daily">Daily</option>
+          <option value="weekly">Weekly</option>
+          <option value="monthly" selected>Monthly</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Status</label>
+        <select id="status">
+          <option value="">All</option>
+          <option value="new">New</option>
+          <option value="open">Open</option>
+          <option value="pending">Pending</option>
+          <option value="hold">Hold</option>
+          <option value="solved">Solved</option>
+          <option value="closed">Closed</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Priority</label>
+        <select id="priority">
+          <option value="">All</option>
+          <option value="urgent">Urgent</option>
+          <option value="high">High</option>
+          <option value="normal">Normal</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Top N Tags</label>
+        <select id="topN">
+          <option value="5">5</option>
+          <option value="10">10</option>
+          <option value="15" selected>15</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+        </select>
+      </div>
+      <button class="btn" id="fetchBtn" onclick="fetchData()">Fetch Data</button>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('trends')">問い合わせ件数推移</div>
+      <div class="tab" onclick="switchTab('categories')">カテゴリ・タグ別分析</div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="value" id="totalTickets">-</div>
+        <div class="label">Total Tickets</div>
+      </div>
+      <div class="metric-card">
+        <div class="value" id="dateRange">-</div>
+        <div class="label">Date Range</div>
+      </div>
+      <div class="metric-card">
+        <div class="value" id="periodLabel">-</div>
+        <div class="label">Aggregation Period</div>
+      </div>
+    </div>
+
+    <div id="errorMsg" class="error" style="display:none;"></div>
+
+    <!-- Trends Tab -->
+    <div id="trendsTab">
+      <div class="chart-section">
+        <h2>Ticket Count Trend</h2>
+        <div id="trendChart" class="loading">Click "Fetch Data" to load</div>
+      </div>
+    </div>
+
+    <!-- Categories Tab -->
+    <div id="categoriesTab" style="display:none;">
+      <div class="chart-row">
+        <div class="chart-section">
+          <h2>Status Distribution</h2>
+          <div id="statusBar"></div>
+        </div>
+        <div class="chart-section">
+          <h2>Status Proportion</h2>
+          <div id="statusPie"></div>
+        </div>
+      </div>
+      <div class="chart-row">
+        <div class="chart-section">
+          <h2>Priority Distribution</h2>
+          <div id="priorityBar"></div>
+        </div>
+        <div class="chart-section">
+          <h2>Priority Proportion</h2>
+          <div id="priorityPie"></div>
+        </div>
+      </div>
+      <div class="chart-section">
+        <h2>Top Tags</h2>
+        <div id="tagsBar"></div>
+      </div>
+      <div class="chart-section">
+        <h2>Tag Trends Over Time</h2>
+        <div id="tagTrends"></div>
+      </div>
+    </div>
+  </div>
+
+<script>
+// --- Init default dates ---
+const today = new Date();
+const start = new Date(today);
+start.setDate(start.getDate() - 90);
+document.getElementById('startDate').value = fmt(start);
+document.getElementById('endDate').value = fmt(today);
+
+function fmt(d) {
+  return d.toISOString().split('T')[0];
+}
+
+// --- Tab switching ---
+function switchTab(tab) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('trendsTab').style.display = tab === 'trends' ? '' : 'none';
+  document.getElementById('categoriesTab').style.display = tab === 'categories' ? '' : 'none';
+  if (tab === 'trends') document.querySelectorAll('.tab')[0].classList.add('active');
+  else document.querySelectorAll('.tab')[1].classList.add('active');
+}
+
+// --- Build query string ---
+function getParams() {
+  const p = new URLSearchParams();
+  p.set('start_date', document.getElementById('startDate').value);
+  p.set('end_date', document.getElementById('endDate').value);
+  p.set('period', document.getElementById('period').value);
+  p.set('top_n', document.getElementById('topN').value);
+  const st = document.getElementById('status').value;
+  if (st) p.set('status', st);
+  const pr = document.getElementById('priority').value;
+  if (pr) p.set('priority', pr);
+  return p.toString();
+}
+
+// --- Fetch data from both endpoints ---
+async function fetchData() {
+  const btn = document.getElementById('fetchBtn');
+  const errDiv = document.getElementById('errorMsg');
+  btn.disabled = true;
+  btn.textContent = 'Loading...';
+  errDiv.style.display = 'none';
+
+  const qs = getParams();
+
+  try {
+    const [trendsRes, catsRes] = await Promise.all([
+      fetch(`/api/tickets/trends?${qs}`),
+      fetch(`/api/tickets/categories?${qs}`),
+    ]);
+
+    if (!trendsRes.ok || !catsRes.ok) {
+      const err = await trendsRes.text();
+      throw new Error(`API error: ${err}`);
+    }
+
+    const trends = await trendsRes.json();
+    const cats = await catsRes.json();
+
+    // Update metrics
+    document.getElementById('totalTickets').textContent = trends.total.toLocaleString();
+    document.getElementById('dateRange').textContent =
+      `${document.getElementById('startDate').value} ~ ${document.getElementById('endDate').value}`;
+    document.getElementById('periodLabel').textContent =
+      document.getElementById('period').value.charAt(0).toUpperCase() +
+      document.getElementById('period').value.slice(1);
+
+    renderTrends(trends);
+    renderCategories(cats);
+  } catch (e) {
+    errDiv.textContent = e.message;
+    errDiv.style.display = '';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fetch Data';
+  }
+}
+
+const plotLayout = { margin: { t: 10, b: 40, l: 50, r: 20 }, height: 350, font: { size: 12 } };
+const plotConfig = { responsive: true, displayModeBar: false };
+
+// --- Render trend chart ---
+function renderTrends(data) {
+  const d = data.trend;
+  if (!d.length) {
+    document.getElementById('trendChart').innerHTML = '<p style="text-align:center;color:#888;padding:40px">No data</p>';
+    return;
+  }
+  Plotly.newPlot('trendChart', [{
+    x: d.map(r => r.date),
+    y: d.map(r => r.ticket_count),
+    type: 'scatter', mode: 'lines+markers',
+    line: { color: '#4361ee', width: 2 },
+    marker: { size: 6 },
+  }], { ...plotLayout, xaxis: { title: 'Date' }, yaxis: { title: 'Ticket Count' } }, plotConfig);
+}
+
+// --- Render category charts ---
+function renderCategories(data) {
+  // Status bar
+  renderHBar('statusBar', data.status_distribution, 'status');
+  // Status pie
+  renderPie('statusPie', data.status_distribution, 'status');
+  // Priority bar
+  renderHBar('priorityBar', data.priority_distribution, 'priority');
+  // Priority pie
+  renderPie('priorityPie', data.priority_distribution, 'priority');
+  // Tags bar
+  renderHBar('tagsBar', data.top_tags, 'tag');
+  // Tag trends
+  renderTagTrends('tagTrends', data.tag_trends);
+}
+
+function renderHBar(elId, items, field) {
+  if (!items || !items.length) {
+    document.getElementById(elId).innerHTML = '<p style="text-align:center;color:#888;padding:40px">No data</p>';
+    return;
+  }
+  const sorted = [...items].sort((a, b) => a.ticket_count - b.ticket_count);
+  Plotly.newPlot(elId, [{
+    y: sorted.map(r => r[field] || 'N/A'),
+    x: sorted.map(r => r.ticket_count),
+    type: 'bar', orientation: 'h',
+    marker: { color: '#4361ee' },
+  }], { ...plotLayout, xaxis: { title: 'Ticket Count' } }, plotConfig);
+}
+
+function renderPie(elId, items, field) {
+  if (!items || !items.length) {
+    document.getElementById(elId).innerHTML = '<p style="text-align:center;color:#888;padding:40px">No data</p>';
+    return;
+  }
+  Plotly.newPlot(elId, [{
+    labels: items.map(r => r[field] || 'N/A'),
+    values: items.map(r => r.ticket_count),
+    type: 'pie', hole: 0.4,
+    textinfo: 'label+percent',
+  }], { ...plotLayout }, plotConfig);
+}
+
+function renderTagTrends(elId, items) {
+  if (!items || !items.length) {
+    document.getElementById(elId).innerHTML = '<p style="text-align:center;color:#888;padding:40px">No data</p>';
+    return;
+  }
+  const tags = [...new Set(items.map(r => r.tag))];
+  const traces = tags.map(tag => {
+    const rows = items.filter(r => r.tag === tag);
+    return {
+      x: rows.map(r => r.date),
+      y: rows.map(r => r.ticket_count),
+      name: tag, type: 'scatter', mode: 'lines+markers',
+      marker: { size: 5 },
+    };
+  });
+  Plotly.newPlot(elId, traces, {
+    ...plotLayout, height: 400,
+    xaxis: { title: 'Date' }, yaxis: { title: 'Ticket Count' },
+    legend: { orientation: 'h', y: -0.2 },
+  }, plotConfig);
+}
+</script>
+</body>
+</html>

@@ -19,23 +19,12 @@ class ZendeskConfig:
         return (f"{self.email}/token", self.api_token)
 
 
-def _get_secret(key: str) -> str | None:
-    """Streamlit Secrets (.streamlit/secrets.toml or Cloud) -> env var の順で取得"""
-    try:
-        import streamlit as st
-
-        return st.secrets.get(key)
-    except Exception:
-        pass
-    return os.getenv(key)
-
-
 def load_config() -> ZendeskConfig:
     load_dotenv()
 
-    subdomain = _get_secret("ZENDESK_SUBDOMAIN")
-    email = _get_secret("ZENDESK_EMAIL")
-    api_token = _get_secret("ZENDESK_API_TOKEN")
+    subdomain = os.getenv("ZENDESK_SUBDOMAIN")
+    email = os.getenv("ZENDESK_EMAIL")
+    api_token = os.getenv("ZENDESK_API_TOKEN")
 
     missing = []
     if not subdomain:
@@ -48,7 +37,7 @@ def load_config() -> ZendeskConfig:
     if missing:
         raise ValueError(
             f"Missing required environment variables: {', '.join(missing)}. "
-            "Please set them in a .env file or Streamlit Secrets."
+            "Please set them in a .env file."
         )
 
     return ZendeskConfig(subdomain=subdomain, email=email, api_token=api_token)

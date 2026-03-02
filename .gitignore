@@ -1,6 +1,8 @@
 .env
 __pycache__/
 *.pyc
-.streamlit/secrets.toml
 .venv/
 venv/
+.vercel/
+node_modules/
+zendesk_data_analysis/

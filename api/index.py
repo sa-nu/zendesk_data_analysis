@@ -1,5 +1,6 @@
 import sys
 from pathlib import Path
+from typing import List, Optional
 
 # Vercel serverless functions run from the api/ directory.
 # Add the project root to sys.path so that `src` package is importable.
@@ -9,6 +10,7 @@ from datetime import date
 
 from fastapi import FastAPI, Query
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from src.config import load_config
 from src.data_processor import (
@@ -42,8 +44,8 @@ def ticket_trends(
     start_date: date = Query(...),
     end_date: date = Query(...),
     period: str = Query("monthly", pattern="^(daily|weekly|monthly)$"),
-    status: list[str] | None = Query(None),
-    priority: str | None = Query(None),
+    status: Optional[List[str]] = Query(None),
+    priority: Optional[str] = Query(None),
 ):
     client = _get_client()
     filters = {}
@@ -68,8 +70,8 @@ def ticket_categories(
     end_date: date = Query(...),
     top_n: int = Query(15, ge=1, le=50),
     period: str = Query("monthly", pattern="^(daily|weekly|monthly)$"),
-    status: list[str] | None = Query(None),
-    priority: str | None = Query(None),
+    status: Optional[List[str]] = Query(None),
+    priority: Optional[str] = Query(None),
 ):
     client = _get_client()
     filters = {}
@@ -98,3 +100,10 @@ def ticket_categories(
         "top_tags": to_records(tags),
         "tag_trends": to_records(tag_trends),
     }
+
+
+# Serve static files locally (Vercel handles this via public/ automatically)
+# Must be mounted AFTER API routes to avoid catching /api/* paths
+_public_dir = Path(__file__).resolve().parent.parent / "public"
+if _public_dir.exists():
+    app.mount("/", StaticFiles(directory=str(_public_dir), html=True), name="static")

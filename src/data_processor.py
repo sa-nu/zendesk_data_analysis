@@ -1,7 +1,9 @@
+from typing import Dict, List
+
 import pandas as pd
 
 
-def tickets_to_dataframe(tickets: list[dict]) -> pd.DataFrame:
+def tickets_to_dataframe(tickets: List[Dict]) -> pd.DataFrame:
     if not tickets:
         return pd.DataFrame()
 

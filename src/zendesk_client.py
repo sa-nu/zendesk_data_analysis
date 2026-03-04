@@ -1,5 +1,6 @@
 import time
 from datetime import date, timedelta
+from typing import Dict, List, Optional
 
 import requests
 
@@ -18,7 +19,7 @@ class ZendeskClient:
             {"Content-Type": "application/json", "Accept": "application/json"}
         )
 
-    def _get_with_rate_limit(self, url: str, params: dict | None = None) -> dict:
+    def _get_with_rate_limit(self, url: str, params: Optional[dict] = None) -> dict:
         response = self._session.get(url, params=params)
 
         if response.status_code == 429:
@@ -53,10 +54,10 @@ class ZendeskClient:
         self,
         start_date: date,
         end_date: date,
-        status: list[str] | None = None,
-        priority: str | None = None,
-        tags: list[str] | None = None,
-        group_name: str | None = None,
+        status: Optional[List[str]] = None,
+        priority: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        group_name: Optional[str] = None,
     ) -> list[dict]:
         query_parts = [
             "type:ticket",
